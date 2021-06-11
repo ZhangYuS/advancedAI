@@ -1,0 +1,10 @@
+output/
+data/train/all
+data/train/cat
+data/train/dog
+data/train/human
+data/val/all
+data/val/cat
+data/val/dog
+data/val/human
+.idea
