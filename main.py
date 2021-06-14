@@ -15,6 +15,17 @@ from PIL import Image
 from efficientnet_pytorch import EfficientNet
 
 # use PIL Image to read image
+
+def calculate_F1(pred_label, golden_label, label_num):
+    TP = torch.sum((pred_label==label_num)&(golden_label==label_num))
+    TN = torch.sum((pred_label!=label_num)&(golden_label!=label_num))
+    FN = torch.sum((pred_label!=label_num)&(golden_label==label_num))
+    FP = torch.sum((pred_label==label_num)&(golden_label!=label_num))
+    pre = 0 if (TP.item() + FP.item()) == 0 else TP.item() / (TP.item() + FP.item())
+    rec = 0 if (TP.item() + FN.item()) == 0 else TP.item() / (TP.item() + FN.item())
+    F1 = 0 if (pre + rec) == 0 else (2 * pre * rec) / (pre + rec)
+    return {'pre': pre, 'rec': rec, 'F1': F1}
+
 def default_loader(path):
     try:
         img = Image.open(path)
@@ -24,7 +35,7 @@ def default_loader(path):
 
 # define your Dataset. Assume each line in your .txt file is [name/tab/label], for example:0001.jpg 1
 class customData(Dataset):
-    def __init__(self, img_path, txt_path, dataset = '', data_transforms=None, loader = default_loader):
+    def __init__(self, img_path, txt_path, dataset = '', data_transforms=None, loader = default_loader, label_index=None):
         with open(txt_path) as input_file:
             lines = input_file.readlines()
             self.img_name = [os.path.join(img_path, line.strip().split('\t')[0]) for line in lines]
@@ -32,6 +43,7 @@ class customData(Dataset):
         self.data_transforms = data_transforms
         self.dataset = dataset
         self.loader = loader
+        self.label_index = label_index
 
     def __len__(self):
         return len(self.img_name)
@@ -48,7 +60,7 @@ class customData(Dataset):
                 print("Cannot transform image: {}".format(img_name))
         return img, label
 
-def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu):
+def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, label_index=None):
     since = time.time()
 
     best_model_wts = model.state_dict()
@@ -107,6 +119,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu):
                     print('{} Epoch [{}] Batch [{}] Loss: {:.4f} Acc: {:.4f} Time: {:.4f}s'. \
                           format(phase, epoch, count_batch, batch_loss, batch_acc, time.time()-begin_time))
                     begin_time = time.time()
+                    for idx, label in enumerate(label_index):
+                        F1 = calculate_F1(preds, labels.data, idx)
+                        print('{} Epoch [{}] Batch [{}] {} pre: {:.4f} rec: {:.4f} F1: {:.4f}s'. \
+                              format(phase, epoch, count_batch, label, F1['pre'], F1['rec'], F1['F1']))
+                    print('-' * 30)
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
@@ -149,11 +166,14 @@ if __name__ == '__main__':
 
     batch_size = 32
     num_class = 3
-
-    image_datasets = {x: customData(img_path=os.path.join('data', x, 'processed'),
-                                    txt_path=(os.path.join('data', x, x + '_file_list.txt')),
+    label_index = ['human', 'cat', 'dog']
+    # data_file = 'data'
+    # data_file = 'unbalanced_data/06-14-00-18-58_50_300'
+    data_file = 'unbalanced_data/06-14-23-42-40_50_50'
+    image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
+                                    txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
                                     data_transforms=data_transforms,
-                                    dataset=x) for x in ['train', 'val']}
+                                    dataset=x, label_index=label_index) for x in ['train', 'val']}
 
     # wrap your data and label into Tensor
     dataloders = {x: torch.utils.data.DataLoader(image_datasets[x],
@@ -196,7 +216,8 @@ if __name__ == '__main__':
                            optimizer=optimizer_ft,
                            scheduler=exp_lr_scheduler,
                            num_epochs=25,
-                           use_gpu=use_gpu)
+                           use_gpu=use_gpu,
+                           label_index=label_index)
 
     # save best model
     torch.save(model_ft,"output/best_resnet.pkl")
