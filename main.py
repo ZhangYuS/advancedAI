@@ -201,9 +201,9 @@ if __name__ == '__main__':
     batch_size = 64
     num_class = 3
     label_index = ['human', 'cat', 'dog']
-    #data_file = 'data'
-    data_file = 'unbalanced_data/06-15-16-46-42_50_300'
-    # data_file = 'unbalanced_data/06-15-16-56-41_50_50'
+    # data_file = 'data'
+    # data_file = 'unbalanced_data/06-15-16-46-42_50_300'
+    data_file = 'unbalanced_data/06-15-16-56-41_50_50'
 
     image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
