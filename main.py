@@ -15,6 +15,8 @@ import os
 from PIL import Image
 from efficientnet_pytorch import EfficientNet
 
+from Focal_Loss import focal_loss
+
 # use PIL Image to read image
 
 def calculate_F1(pred_label, golden_label, label_num):
@@ -137,8 +139,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
-
+            epoch_f1_all = f1_score(labels_all, preds_all, labels= [0, 1, 2],average=None)
             epoch_f1_macro = f1_score(labels_all, preds_all, average='macro')
+
+            for l, f1 in zip(['human', 'cat', 'dog'], epoch_f1_all):
+                print(f'{l}: {f1}')
+            print(f'f1_all: {epoch_f1_all}')
 
             print(f'F1: {epoch_f1_macro}')
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
@@ -170,6 +176,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
 
 if __name__ == '__main__':
 
+    seed = 3000
+    # random.seed(seed)
+    # np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.cuda.manual_seed(seed)
+
     data_transforms = {
         'train': transforms.Compose([
             transforms.ToTensor(),
@@ -186,9 +201,10 @@ if __name__ == '__main__':
     batch_size = 64
     num_class = 3
     label_index = ['human', 'cat', 'dog']
-    data_file = 'data'
-    # data_file = 'unbalanced_data/06-14-00-18-58_50_300'
-    # data_file = 'unbalanced_data/06-14-23-42-40_50_50'
+    #data_file = 'data'
+    data_file = 'unbalanced_data/06-15-16-46-42_50_300'
+    # data_file = 'unbalanced_data/06-15-16-56-41_50_50'
+
     image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
                                     data_transforms=data_transforms,
@@ -218,7 +234,8 @@ if __name__ == '__main__':
         model_ft = model_ft.cuda()
 
     # define cost function
-    criterion = nn.CrossEntropyLoss()
+    #criterion = nn.CrossEntropyLoss()
+    criterion = focal_loss(alpha=[1, 12, 1], gamma=2, num_classes=3)
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.AdamW(model_ft.parameters(), lr=0.001)
