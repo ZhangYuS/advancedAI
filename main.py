@@ -5,14 +5,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
+from torch.utils.data import Dataset
 from torchvision import  models, transforms
+from sklearn.metrics import f1_score
 
 import time
 import os
-from torch.utils.data import Dataset
 
 from PIL import Image
 from efficientnet_pytorch import EfficientNet
+
+from Focal_Loss import focal_loss
 
 # use PIL Image to read image
 
@@ -65,12 +68,14 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
 
     best_model_wts = model.state_dict()
     best_acc = 0.0
+    best_f1 = 0.0
 
     for epoch in range(num_epochs):
         begin_time = time.time()
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-
+        preds_all = None
+        labels_all = None
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
@@ -112,6 +117,13 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
                 running_loss += loss.item()
                 running_corrects += torch.sum(preds == labels.data)
 
+                if preds_all is None:
+                    preds_all = preds.cpu().detach()
+                    labels_all = labels.data.cpu().detach()
+                else:
+                    preds_all = torch.cat((preds_all, preds.cpu().detach()), dim=0)
+                    labels_all = torch.cat((labels_all, labels.data.cpu().detach()), dim=0)
+
                 # print result every 10 batch
                 if count_batch%10 == 0:
                     batch_loss = running_loss / (batch_size*count_batch)
@@ -119,14 +131,22 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
                     print('{} Epoch [{}] Batch [{}] Loss: {:.4f} Acc: {:.4f} Time: {:.4f}s'. \
                           format(phase, epoch, count_batch, batch_loss, batch_acc, time.time()-begin_time))
                     begin_time = time.time()
-                    for idx, label in enumerate(label_index):
-                        F1 = calculate_F1(preds, labels.data, idx)
-                        print('{} Epoch [{}] Batch [{}] {} pre: {:.4f} rec: {:.4f} F1: {:.4f}s'. \
-                              format(phase, epoch, count_batch, label, F1['pre'], F1['rec'], F1['F1']))
-                    print('-' * 30)
+                    # for idx, label in enumerate(label_index):
+                    #     F1 = calculate_F1(preds, labels.data, idx)
+                    #     print('{} Epoch [{}] Batch [{}] {} pre: {:.4f} rec: {:.4f} F1: {:.4f}s'. \
+                    #           format(phase, epoch, count_batch, label, F1['pre'], F1['rec'], F1['F1']))
+                    # print('-' * 30)
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
+            epoch_f1_all = f1_score(labels_all, preds_all, labels= [0, 1, 2],average=None)
+            epoch_f1_macro = f1_score(labels_all, preds_all, average='macro')
+
+            for l, f1 in zip(['human', 'cat', 'dog'], epoch_f1_all):
+                print(f'{l}: {f1}')
+            print(f'f1_all: {epoch_f1_all}')
+
+            print(f'F1: {epoch_f1_macro}')
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
             # save model
@@ -140,16 +160,30 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
                 best_acc = epoch_acc
                 best_model_wts = model.state_dict()
 
+            if phase == 'val' and epoch_f1_macro > best_f1:
+                best_f1 = epoch_f1_macro
+                #best_model_wts = model.state_dict()
+
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
     print('Best val Acc: {:4f}'.format(best_acc))
+    print('Best val F1: {:4f}'.format(best_f1))
 
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model
 
 if __name__ == '__main__':
+
+    seed = 3000
+    # random.seed(seed)
+    # np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.cuda.manual_seed(seed)
 
     data_transforms = {
         'train': transforms.Compose([
@@ -164,12 +198,13 @@ if __name__ == '__main__':
 
     use_gpu = torch.cuda.is_available()
 
-    batch_size = 32
+    batch_size = 64
     num_class = 3
     label_index = ['human', 'cat', 'dog']
     # data_file = 'data'
-    # data_file = 'unbalanced_data/06-14-00-18-58_50_300'
-    data_file = 'unbalanced_data/06-14-23-42-40_50_50'
+    # data_file = 'unbalanced_data/06-15-16-46-42_50_300'
+    data_file = 'unbalanced_data/06-15-16-56-41_50_50'
+
     image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
                                     data_transforms=data_transforms,
@@ -199,10 +234,11 @@ if __name__ == '__main__':
         model_ft = model_ft.cuda()
 
     # define cost function
-    criterion = nn.CrossEntropyLoss()
+    #criterion = nn.CrossEntropyLoss()
+    criterion = focal_loss(alpha=[1, 12, 1], gamma=2, num_classes=3)
 
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.005, momentum=0.9)
+    optimizer_ft = optim.AdamW(model_ft.parameters(), lr=0.001)
 
     # Decay LR by a factor of 0.2 every 5 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.2)
@@ -221,5 +257,6 @@ if __name__ == '__main__':
 
     # save best model
     torch.save(model_ft,"output/best_resnet.pkl")
+
 
 
