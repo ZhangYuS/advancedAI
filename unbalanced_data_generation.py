@@ -6,7 +6,8 @@ label_num = ['human', 'cat', 'dog']
 def parse_arg():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cat_num', type=int, default=50, help='number of cat pictures')
-    parser.add_argument('--normal_num', type=int, default=300, help='number of human or dog pictures')
+    parser.add_argument('--human_num', type=int, default=300, help='number of human pictures')
+    parser.add_argument('--dog_num', type=int, default=300, help='number of dog pictures')
     arg = parser.parse_args()
     return arg
 
@@ -21,18 +22,18 @@ def load_data(data_path):
 def generate_data_file(train_data, val_data, arg):
     if [x[1] for x in train_data].count(label_num.index('cat')) < arg.cat_num:
         raise ValueError('total number of cat less than cat_num')
-    if [x[1] for x in train_data].count(label_num.index('human')) < arg.normal_num:
+    if [x[1] for x in train_data].count(label_num.index('human')) < arg.human_num:
         raise ValueError('total number of human less than normal_num')
-    if [x[1] for x in train_data].count(label_num.index('dog')) < arg.normal_num:
+    if [x[1] for x in train_data].count(label_num.index('dog')) < arg.dog_num:
         raise ValueError('total number of dog less than normal_num')
 
     human_train_data = list(filter(lambda x: True if x[1] == label_num.index('human') else False, train_data))
     cat_train_data = list(filter(lambda x: True if x[1] == label_num.index('cat') else False, train_data))
     dog_train_data = list(filter(lambda x: True if x[1] == label_num.index('dog') else False, train_data))
 
-    ret_train_data = random.choices(human_train_data, k=arg.normal_num)\
+    ret_train_data = random.choices(human_train_data, k=arg.human_num)\
                      + random.choices(cat_train_data, k=arg.cat_num)\
-                     + random.choices(dog_train_data, k=arg.normal_num)
+                     + random.choices(dog_train_data, k=arg.dog_num)
     ret_val_data = val_data
     return ret_train_data, ret_val_data
 
@@ -40,7 +41,7 @@ def make_dir(target_data_path, arg):
     if not os.path.exists(target_data_path):
         os.mkdir(target_data_path)
     date = time.strftime("%m-%d-%H-%M-%S")
-    data_file_name = f'{date}_{arg.cat_num}_{arg.normal_num}'
+    data_file_name = f'{date}_{arg.cat_num}_{arg.human_num}_{arg.dog_num}'
     os.mkdir(os.path.join(target_data_path, data_file_name))
     os.mkdir(os.path.join(target_data_path, data_file_name, 'train'))
     os.mkdir(os.path.join(target_data_path, data_file_name, 'val'))

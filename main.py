@@ -203,7 +203,7 @@ if __name__ == '__main__':
     label_index = ['human', 'cat', 'dog']
     # data_file = 'data'
     # data_file = 'unbalanced_data/06-15-16-46-42_50_300'
-    data_file = 'unbalanced_data/06-15-16-56-41_50_50'
+    data_file = 'unbalanced_data/06-17-10-49-25_300_50_300'
 
     image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
@@ -234,8 +234,8 @@ if __name__ == '__main__':
         model_ft = model_ft.cuda()
 
     # define cost function
-    #criterion = nn.CrossEntropyLoss()
-    criterion = focal_loss(alpha=[1, 12, 1], gamma=2, num_classes=3)
+    criterion = nn.CrossEntropyLoss()
+    # criterion = focal_loss(alpha=[1, 12, 1], gamma=2, num_classes=3)
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.AdamW(model_ft.parameters(), lr=0.001)
