@@ -13,6 +13,7 @@ import time
 import os
 
 from PIL import Image
+import random
 from efficientnet_pytorch import EfficientNet
 
 from Focal_Loss import focal_loss
@@ -62,6 +63,40 @@ class customData(Dataset):
             except:
                 print("Cannot transform image: {}".format(img_name))
         return img, label
+
+    def undersampling(self):
+        data_pair = list(zip(self.img_name, self.img_label))
+        label_data = {}
+        for idx, label in enumerate(self.label_index):
+            label_data[label] = list(filter(lambda x: x[1]==idx, data_pair))
+        label_data_num = {x[0]: len(x[1]) for x in label_data.items()}
+        balance_num = min(label_data_num.values())
+        balance_data_pair = []
+        for label in self.label_index:
+            if label_data_num[label] > balance_num:
+                label_data[label] = random.choices(label_data[label], k=balance_num)
+            else:
+                label_data[label] = (label_data[label] * (balance_num // label_data_num[label]))[: balance_num]
+            balance_data_pair += label_data[label]
+        self.img_name, self.img_label = zip(*balance_data_pair)
+
+
+    def oversampling(self):
+        data_pair = list(zip(self.img_name, self.img_label))
+        label_data = {}
+        for idx, label in enumerate(self.label_index):
+            label_data[label] = list(filter(lambda x: x[1] == idx, data_pair))
+        label_data_num = {x[0]: len(x[1]) for x in label_data.items()}
+        balance_num = max(label_data_num.values())
+        balance_data_pair = []
+        for label in self.label_index:
+            if label_data_num[label] > balance_num:
+                label_data[label] = random.choices(label_data[label], k=balance_num)
+            else:
+                label_data[label] = (label_data[label] * (balance_num // label_data_num[label]))[: balance_num]
+            balance_data_pair += label_data[label]
+        self.img_name, self.img_label = zip(*balance_data_pair)
+
 
 def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, label_index=None):
     since = time.time()
@@ -209,6 +244,7 @@ if __name__ == '__main__':
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
                                     data_transforms=data_transforms,
                                     dataset=x, label_index=label_index) for x in ['train', 'val']}
+    image_datasets['train'].oversampling()
 
     # wrap your data and label into Tensor
     dataloders = {x: torch.utils.data.DataLoader(image_datasets[x],
