@@ -217,7 +217,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs, use_gpu, lab
 
 if __name__ == '__main__':
 
-    seed = 3000
+    seed = 2000
     # random.seed(seed)
     # np.random.seed(seed)
     torch.manual_seed(seed)
@@ -243,18 +243,15 @@ if __name__ == '__main__':
     num_class = 3
     label_index = ['human', 'cat', 'dog']
     # data_file = 'data'
-    # data_file = 'unbalanced_data/06-17-18-03-07_50_300_300'
+    data_file = 'unbalanced_data/06-17-18-03-07_50_300_300'
     # data_file = 'unbalanced_data/06-19-15-57-09_300_50_300'
     # data_file = 'unbalanced_data/06-19-16-00-51_300_300_50'
-    data_file = 'unbalanced_data/06-19-17-23-27_100_300_300'
-
-
 
     image_datasets = {x: customData(img_path=os.path.join(data_file, x, 'processed'),
                                     txt_path=(os.path.join(data_file, x, x + '_file_list.txt')),
                                     data_transforms=data_transforms,
                                     dataset=x, label_index=label_index) for x in ['train', 'val']}
-    image_datasets['train'].oversampling()
+    # image_datasets['train'].oversampling()
     # image_datasets['train'].undersampling()
 
     # wrap your data and label into Tensor
@@ -265,27 +262,27 @@ if __name__ == '__main__':
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
 
     # get model and replace the original fc layer with your fc layer
-    model_ft = models.resnet50(pretrained=True)
-    num_ftrs = model_ft.fc.in_features
-    model_ft.fc = nn.Linear(num_ftrs, num_class)
+    # model_ft = models.resnet50(pretrained=True)
+    # num_ftrs = model_ft.fc.in_features
+    # model_ft.fc = nn.Linear(num_ftrs, num_class)
 
-    # efficient_net = EfficientNet.from_pretrained('efficientnet-b0')
-    #
-    # model = nn.Sequential(
-    #     efficient_net,
-    #     nn.Linear(1000, 3)
-    # )
+    efficient_net = EfficientNet.from_pretrained('efficientnet-b0')
+
+    model_ft = nn.Sequential(
+        efficient_net,
+        nn.Linear(1000, 3)
+    )
 
     # if use gpu
     if use_gpu:
         model_ft = model_ft.cuda()
 
     # define cost function
-    criterion = nn.CrossEntropyLoss()
-    # criterion = focal_loss(alpha=[1, 1, 2], gamma=1, num_classes=3)
+    # criterion = nn.CrossEntropyLoss()
+    criterion = focal_loss(alpha=[1, 12, 1], gamma=2, num_classes=3)
 
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.AdamW(model_ft.parameters(), lr=0.0005)
+    optimizer_ft = optim.AdamW(model_ft.parameters(), lr=0.001)
 
     # Decay LR by a factor of 0.2 every 5 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.2)
@@ -303,7 +300,4 @@ if __name__ == '__main__':
                            label_index=label_index)
 
     # save best model
-    torch.save(model_ft, "output/best_resnet.pkl")
-
-
-
+    torch.save(model_ft,"output/best_resnet.pkl")
